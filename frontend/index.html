@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recycling Reward System</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1 {
+        color: #2c3e50;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #3498db;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      input {
+        padding: 10px;
+        margin-right: 10px;
+      }
+      .output {
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Recycling Reward System</h1>
+
+    <!-- Connect MetaMask -->
+    <div>
+      <button id="connectButton">Connect MetaMask</button>
+    </div>
+
+    <!-- Displaying Contract Information -->
+    <div id="userAddress" class="output"></div>
+    <div id="userBalance" class="output"></div>
+
+    <div id="recycleSection">
+      <h2>Recycle and Earn Rewards</h2>
+      <input
+        type="number"
+        id="recycleAmount"
+        placeholder="Enter recycling amount"
+      />
+      <button id="recycleButton">Recycle</button>
+    </div>
+
+    <div id="mintSection">
+      <h2>Mint Tokens (Owner Only)</h2>
+      <input type="text" id="mintAddress" placeholder="Recipient Address" />
+      <input type="number" id="mintAmount" placeholder="Amount to Mint" />
+      <button id="mintButton">Mint Tokens</button>
+    </div>
+
+    <div id="errorMessage" class="output" style="color: red"></div>
+
+    <script>
+      let web3;
+      let contract;
+      let userAccount;
+      let contractAddress = "0x7953661a83036cDcd1800F7295869C90841e807b";
+      let contractABI = [
+        {
+          inputs: [],
+          stateMutability: "nonpayable",
+          type: "constructor",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "user",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "rewardAmount",
+              type: "uint256",
+            },
+          ],
+          name: "Recycle",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "to",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "TokensMinted",
+          type: "event",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "account",
+              type: "address",
+            },
+          ],
+          name: "balanceOf",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "decimals",
+          outputs: [
+            {
+              internalType: "uint8",
+              name: "",
+              type: "uint8",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "to",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "mintTokens",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "name",
+          outputs: [
+            {
+              internalType: "string",
+              name: "",
+              type: "string",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "owner",
+          outputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "recycle",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "symbol",
+          outputs: [
+            {
+              internalType: "string",
+              name: "",
+              type: "string",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalSupply",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+      ];
+
+      // Connect MetaMask
+      document
+        .getElementById("connectButton")
+        .addEventListener("click", async () => {
+          if (typeof window.ethereum !== "undefined") {
+            web3 = new Web3(window.ethereum);
+            await window.ethereum.request({ method: "eth_requestAccounts" });
+            const accounts = await web3.eth.getAccounts();
+            userAccount = accounts[0];
+
+            document.getElementById("userAddress").innerText =
+              "Your Address: " + userAccount;
+            await updateBalance();
+          } else {
+            alert("MetaMask not detected. Please install MetaMask.");
+          }
+        });
+
+      // Initialize Contract
+      window.onload = async () => {
+        contract = new web3.eth.Contract(contractABI, contractAddress);
+      };
+
+      // Recycle and claim reward tokens
+      document
+        .getElementById("recycleButton")
+        .addEventListener("click", async () => {
+          const amount = document.getElementById("recycleAmount").value;
+          if (amount > 0) {
+            try {
+              await contract.methods
+                .recycle(amount)
+                .send({ from: userAccount });
+              alert(`Recycled ${amount} units!`);
+            } catch (error) {
+              console.error(error);
+              alert("Error in recycling transaction.");
+            }
+          } else {
+            alert("Please enter a valid amount.");
+          }
+        });
+
+      // Mint tokens (Only for contract owner)
+      document
+        .getElementById("mintButton")
+        .addEventListener("click", async () => {
+          const mintAddress = document.getElementById("mintAddress").value;
+          const mintAmount = document.getElementById("mintAmount").value;
+
+          if (!mintAddress || mintAmount <= 0) {
+            alert("Please enter a valid recipient address and amount.");
+            return;
+          }
+
+          try {
+            await contract.methods
+              .mintTokens(mintAddress, mintAmount)
+              .send({ from: userAccount });
+            alert(
+              `Successfully minted ${mintAmount} tokens for ${mintAddress}`
+            );
+          } catch (error) {
+            console.error(error);
+            alert("Error minting tokens. Ensure you are the contract owner.");
+          }
+        });
+
+      // Update user balance
+      async function updateBalance() {
+        const balance = await contract.methods.balanceOf(userAccount).call();
+        document.getElementById("userBalance").innerText =
+          "Your Balance: " + balance;
+      }
+    </script>
+  </body>
+</html>
